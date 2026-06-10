@@ -1,0 +1,50 @@
+# divisi.conf.example - copy to your local config and edit, or just run
+# `divisi init` to generate one by answering prompts. The real config lives
+# OUTSIDE this repo (default: ~/.config/divisi/divisi.conf) and is gitignored.
+# It is sourced as bash, so $HOME and command substitution work.
+
+DIVISI_IMAGE="agentbox"
+DIVISI_BASE="registry.fedoraproject.org/fedora:43"
+DIVISI_STATE="$HOME/.local/share/divisi"     # context homes live here
+DIVISI_UID="$(id -u)"
+DIVISI_USER="$(id -un)"
+
+# Agent CLIs that must never run on the host (blocked by `divisi enforce`).
+DIVISI_GUARD_TOOLS=(claude codex gemini)
+
+# The contexts to create. Names are yours; these are only examples.
+CONTEXTS=(work personal scratch)
+
+declare -gA CTX_MOUNT CTX_GIT_NAME CTX_GIT_EMAIL CTX_GH CTX_COLOR
+declare -gA CTX_CLAUDE_AUTH CTX_VERTEX_PROJECT CTX_VERTEX_REGION CTX_SECRETS CTX_SEED
+
+# -- work: employer repos, employer identity, Vertex AI ---------------------
+CTX_MOUNT[work]="$HOME/work"
+CTX_GIT_NAME[work]="Your Name"
+CTX_GIT_EMAIL[work]="you@employer.example"
+CTX_GH[work]="work-gh-account"               # a note to yourself; login is manual
+CTX_COLOR[work]="1;31"                        # red prompt
+CTX_CLAUDE_AUTH[work]="vertex"
+CTX_VERTEX_PROJECT[work]="your-gcp-project-id"
+CTX_VERTEX_REGION[work]="us-east5"
+CTX_SECRETS[work]=""                          # space-separated host paths to vault
+CTX_SEED[work]="gcloud"                        # copy host ~/.config/gcloud ADC in
+
+# -- personal: your own projects, personal identity, Claude.ai --------------
+CTX_MOUNT[personal]="$HOME/projects"
+CTX_GIT_NAME[personal]="Your Name"
+CTX_GIT_EMAIL[personal]="you@personal.example"
+CTX_GH[personal]="personal-gh-account"
+CTX_COLOR[personal]="1;32"                     # green prompt
+CTX_CLAUDE_AUTH[personal]="claude_ai"
+CTX_SECRETS[personal]="$HOME/.keys/some_api_key"
+CTX_SEED[personal]=""                          # or "claude:/path/to/existing/.claude"
+
+# -- scratch: throwaway, no mounts, no credentials --------------------------
+CTX_MOUNT[scratch]=""
+CTX_GIT_NAME[scratch]="scratch"
+CTX_GIT_EMAIL[scratch]="scratch@localhost"
+CTX_COLOR[scratch]="1;33"                      # yellow prompt
+CTX_CLAUDE_AUTH[scratch]="none"
+CTX_SECRETS[scratch]=""
+CTX_SEED[scratch]=""

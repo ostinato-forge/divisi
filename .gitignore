@@ -1,0 +1,9 @@
+# The real config is machine-specific and may name secret paths. Never commit it.
+divisi.conf
+/divisi.conf
+*.conf.local
+
+# Anything a user might drop here while testing.
+/state/
+*.secret
+*.log

@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# divisi - divide one machine into isolated, per-identity agent contexts.
+#
+#   divisi init            interactively generate a config (nothing hardcoded)
+#   divisi apply           build the image and (re)create every context
+#   divisi enter <name>    open a shell in a context  (or: divisi <name>)
+#   divisi run <name> ...   run one command in a context
+#   divisi check           verify the walls still hold
+#   divisi audit           scan the host for leaked agent secrets / exposure
+#   divisi enforce         (re)install host guard shims for agent CLIs
+#   divisi relabel         fix SELinux labels on context homes
+#   divisi status          list contexts and their running state
+#
+# Config + state live outside this repo (see `divisi init`). The repo holds
+# only generic, shareable code.
+set -euo pipefail
+
+DIVISI_ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+LIB="$DIVISI_ROOT/lib"
+# shellcheck source=lib/common.sh
+. "$LIB/common.sh"
+
+cmd="${1:-help}"; shift || true
+case "$cmd" in
+  init)     . "$LIB/init.sh";    divisi_init "$@" ;;
+  apply)    load_config; . "$LIB/apply.sh";   divisi_apply "$@" ;;
+  check)    load_config; . "$LIB/check.sh";   divisi_check "$@" ;;
+  audit)    . "$LIB/audit.sh";   divisi_audit "$@" ;;
+  enforce)  load_config; . "$LIB/enforce.sh"; divisi_enforce "$@" ;;
+  relabel)  load_config; divisi_relabel; ok "relabeled context homes" ;;
+  status)
+    load_config
+    for n in "${CONTEXTS[@]}"; do
+      state=stopped; ctx_running "$n" && state=running
+      printf '%-16s %-8s home=%s\n' "$n" "$state" "$(ctx_home "$n")"
+    done ;;
+  enter|run)
+    load_config; require_podman
+    name="${1:?usage: divisi $cmd <name> [cmd...]}"; shift || true
+    printf '%s\n' "${CONTEXTS[@]}" | grep -qx "$name" || die "unknown context: $name"
+    podman start "$name" >/dev/null 2>&1 || true
+    if [ "$cmd" = run ] || [ "$#" -gt 0 ]; then
+      exec podman exec -it -w "/home/$DIVISI_USER" "$name" bash -lc "$*"
+    fi
+    exec podman exec -it -w "/home/$DIVISI_USER" "$name" bash -l ;;
+  help|-h|--help) sed -n '2,20p' "$(readlink -f "${BASH_SOURCE[0]}")" | sed 's/^# \{0,1\}//' ;;
+  *)
+    # bare context name shortcut: `divisi work` == `divisi enter work`
+    if [ -f "$(divisi_config_path)" ]; then
+      load_config
+      if printf '%s\n' "${CONTEXTS[@]}" | grep -qx "$cmd"; then
+        exec "$0" enter "$cmd" "$@"
+      fi
+    fi
+    die "unknown command: $cmd (try: divisi help)" ;;
+esac
