@@ -35,11 +35,11 @@ write_config() {
   cat > "$tmp/divisi.conf" <<CONFIG
 DIVISI_STATE="$tmp/state"
 DIVISI_GUARD_TOOLS=(fakeagent)
-CONTEXTS=(work personal)
+CONTEXTS=(work opensource)
 declare -gA CTX_MOUNT CTX_GIT_NAME CTX_GIT_EMAIL CTX_GH CTX_COLOR
 declare -gA CTX_CLAUDE_AUTH CTX_VERTEX_PROJECT CTX_VERTEX_REGION CTX_SECRETS CTX_SEED
 CTX_MOUNT[work]="$1"
-CTX_MOUNT[personal]="$2"
+CTX_MOUNT[opensource]="$2"
 CONFIG
   export DIVISI_CONFIG="$tmp/divisi.conf"
 }
@@ -87,6 +87,14 @@ printf '\n\n%s\nfakeagent\n1\nwork\n\nA "Name"\na@example.com\n\napi_key\nexampl
 ! rg -q 'example-secret-value' "$DIVISI_CONFIG"
 [ "$(cat "$tmp/state/work/.secrets/anthropic_api_key")" = 'example-secret-value' ]
 bash -n "$DIVISI_CONFIG"
+
+# Accept every suggested context name and check the experiments auth default.
+defaults_config="$tmp/home/defaults.conf"
+{
+  printf '\n\n%s\n' "$tmp/default-state"
+  for ((i=0;i<30;i++)); do printf '\n'; done
+} | DIVISI_CONFIG="$defaults_config" "$root/bin/divisi" init >"$tmp/out" 2>&1
+bash -c 'source "$1"; [ "${CONTEXTS[*]}" = "work opensource experiments" ] && [ "${CTX_CLAUDE_AUTH[experiments]}" = none ]' _ "$defaults_config"
 
 cat > "$tmp/bin/fakeagent" <<'AGENT'
 #!/usr/bin/env bash

@@ -14,12 +14,12 @@ DIVISI_USER="$(id -un)"
 DIVISI_GUARD_TOOLS=(claude codex gemini)
 
 # The contexts to create. Names are yours; these are only examples.
-CONTEXTS=(work personal scratch)
+CONTEXTS=(work opensource experiments)
 
 declare -gA CTX_MOUNT CTX_GIT_NAME CTX_GIT_EMAIL CTX_GH CTX_COLOR
 declare -gA CTX_CLAUDE_AUTH CTX_VERTEX_PROJECT CTX_VERTEX_REGION CTX_SECRETS CTX_SEED
 
-# -- work: employer repos, employer identity, Vertex AI ---------------------
+# Work projects, employer identity, and Vertex AI.
 CTX_MOUNT[work]="$HOME/work"
 CTX_GIT_NAME[work]="Your Name"
 CTX_GIT_EMAIL[work]="you@employer.example"
@@ -31,21 +31,21 @@ CTX_VERTEX_REGION[work]="us-east5"
 CTX_SECRETS[work]=""                          # space-separated host paths to vault
 CTX_SEED[work]="gcloud"                        # copy host ~/.config/gcloud ADC in
 
-# -- personal: your own projects, personal identity, Claude.ai --------------
-CTX_MOUNT[personal]="$HOME/projects"
-CTX_GIT_NAME[personal]="Your Name"
-CTX_GIT_EMAIL[personal]="you@personal.example"
-CTX_GH[personal]="personal-gh-account"
-CTX_COLOR[personal]="1;32"                     # green prompt
-CTX_CLAUDE_AUTH[personal]="claude_ai"
-CTX_SECRETS[personal]="$HOME/.keys/some_api_key"
-CTX_SEED[personal]=""                          # or "claude:/path/to/existing/.claude"
+# Open source projects and their GitHub identity.
+CTX_MOUNT[opensource]="$HOME/opensource"
+CTX_GIT_NAME[opensource]="Your Name"
+CTX_GIT_EMAIL[opensource]="you@opensource.example"
+CTX_GH[opensource]="opensource-gh-account"
+CTX_COLOR[opensource]="1;32"                     # green prompt
+CTX_CLAUDE_AUTH[opensource]="claude_ai"
+CTX_SECRETS[opensource]=""
+CTX_SEED[opensource]=""                          # or "claude:/path/to/existing/.claude"
 
-# -- scratch: throwaway, no mounts, no credentials --------------------------
-CTX_MOUNT[scratch]=""
-CTX_GIT_NAME[scratch]="scratch"
-CTX_GIT_EMAIL[scratch]="scratch@localhost"
-CTX_COLOR[scratch]="1;33"                      # yellow prompt
-CTX_CLAUDE_AUTH[scratch]="none"
-CTX_SECRETS[scratch]=""
-CTX_SEED[scratch]=""
+# Experiments have no workspace mount or seeded credentials.
+CTX_MOUNT[experiments]=""
+CTX_GIT_NAME[experiments]="experiments"
+CTX_GIT_EMAIL[experiments]="experiments@localhost"
+CTX_COLOR[experiments]="1;33"                      # yellow prompt
+CTX_CLAUDE_AUTH[experiments]="none"
+CTX_SECRETS[experiments]=""
+CTX_SEED[experiments]=""

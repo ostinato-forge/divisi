@@ -30,10 +30,10 @@ divisi_init() {
   echo; local n; n="$(_ask 'How many contexts' '3')"
   [[ "$n" =~ ^[1-9][0-9]*$ ]] || die "context count must be a positive number"
   [[ "$state" = /* && "$state" != / ]] || die "context home path must be absolute and cannot be /"
-  local -a names=()
+  local -a names=() default_names=(work opensource experiments)
   local i nm
   for ((i=1;i<=n;i++)); do
-    nm="$(_ask "  name of context $i (e.g. work, personal, scratch)")"
+    nm="$(_ask "  name of context $i" "${default_names[$((i-1))]:-}")"
     [[ "$nm" =~ ^[a-zA-Z][a-zA-Z0-9_-]*$ ]] || die "invalid context name: $nm"
     [[ " ${names[*]} " != *" $nm "* ]] || die "duplicate context name: $nm"
     names+=("$nm")
@@ -51,7 +51,9 @@ divisi_init() {
     gemail="$(_ask "  git user.email (blank = skip)" '')"
     gh="$(_ask "  gh account label for your notes (blank = none)" '')"
     echo "  claude auth: [vertex] Google Vertex AI  [claude_ai] Claude.ai login  [api_key] Anthropic API key  [none]"
-    auth="$(_ask "  claude auth model" 'claude_ai')"
+    local auth_default=claude_ai
+    [ "$nm" = experiments ] && auth_default=none
+    auth="$(_ask "  claude auth model" "$auth_default")"
     vproj=""; vregion=""; seed=""
     case "$auth" in
       vertex)

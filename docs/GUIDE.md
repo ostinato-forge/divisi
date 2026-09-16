@@ -19,8 +19,8 @@ divisi check
    bypasses the guard. The explicit guard override is `DIVISI_OVERRIDE=1`.
 2. Use one identity per context. Divisi sets one git identity, but it does
    not prevent you from adding another `gh` account inside a context.
-3. New checkouts go under the matching context's mounted tree. Risky or
-   throwaway work goes in a no-mount, no-credential context.
+3. New checkouts go under the matching context's mounted tree. Use
+   `experiments` for work without a mounted project tree or seeded credentials.
 4. Keep secrets out of repo trees. `CTX_SECRETS` copies files into
    `~/.secrets` inside the context. Remove source copies if you no longer
    need them.
@@ -56,6 +56,14 @@ the config file. Move that value into
 `$DIVISI_STATE/<name>/.secrets/anthropic_api_key`, set the file mode to 600,
 and remove the `apikey:` entry from the config. The new loader refuses an
 `apikey:` entry so the key is not copied back into the vault on each apply.
+
+## Changing context names
+
+New `divisi init` configs suggest `work`, `opensource`, and `experiments`.
+Existing configs keep their names. To rename a context, back up the config,
+then update `CONTEXTS` and every matching `CTX_` entry. `divisi apply` creates
+a new container and home for the new name. It leaves the old container and home
+in place. Review credentials before moving files between homes.
 
 ## Maintenance
 

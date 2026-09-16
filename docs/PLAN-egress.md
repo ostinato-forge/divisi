@@ -21,11 +21,11 @@ Two layers, both DNS-level:
    known-bad domains. Community-maintained (Steven Black hosts), refreshed
    weekly via cron.
 2. **Cross-contamination rules** (per-context): `--add-host` entries that
-   null-route peer-context domains. Example: personal context blocks
+   null-route peer-context domains. Example: opensource context blocks
    `gitlab.cee.redhat.com`; work context blocks nothing extra.
 
-Allow-by-default. No full traffic logging. Throwaway/experiment contexts stay
-unrestricted (no credentials, nothing to leak).
+Allow by default, with no full traffic log. The experiments context needs no
+extra cross-contamination rules when it has no credentials.
 
 ## Step 1: Migrate from --network host to pasta
 
@@ -40,8 +40,8 @@ network namespace while preserving OAuth callbacks via auto-port-forwarding.
 **Gotcha:** `pasta:` (trailing colon, no options) is a parse error.
 Use `pasta` (bare) when no options are needed.
 
-This is the prerequisite for everything else — without per-container
-namespaces, there's nothing to filter.
+Per-container network namespaces are required before traffic can be filtered
+by context.
 
 ## Step 2: Replace systemd-resolved stub with dnsmasq
 
@@ -96,9 +96,9 @@ curl ... | grep '^0.0.0.0' | grep -v '^0.0.0.0 0.0.0.0' \
   > /var/lib/dnsmasq/threat-blocklist.hosts
 ```
 
-**Gotcha: blocklist path.** Do NOT put the hosts file in `/etc/dnsmasq.d/` —
-dnsmasq's `conf-dir` directive loads every file there as config. The hosts
-format (`0.0.0.0 domain`) causes "bad option at line 1". Use a separate path
+**Gotcha: blocklist path.** Keep the hosts file outside
+`/etc/dnsmasq.d/`. The `conf-dir` directive loads every file there as
+configuration. A hosts entry there causes "bad option at line 1". Use a path
 like `/var/lib/dnsmasq/` and reference it with `addn-hosts=`.
 
 Weekly auto-refresh via `/etc/cron.weekly/update-threat-blocklist`.
@@ -108,7 +108,7 @@ Weekly auto-refresh via `/etc/cron.weekly/update-threat-blocklist`.
 Per-container `/etc/hosts` entries via `--add-host`:
 
 ```bash
-# personal context: block work-internal domains
+# opensource context: block work-internal domains
 --add-host internal.corp.example.com:0.0.0.0 \
 --add-host git.corp.example.com:0.0.0.0 \
 ```
@@ -116,10 +116,10 @@ Per-container `/etc/hosts` entries via `--add-host`:
 These go into `/etc/hosts` inside the container, which glibc checks *before*
 DNS. No IPv6 bypass issue here (getent returns the hosts entry directly).
 
-Work contexts typically need no cross-contamination blocks (personal forges
-are public, and there's no credential to authenticate with anyway).
+Work contexts typically need no cross-contamination blocks for public open
+source forges when they hold no credentials for those forges.
 
-**Limitation:** `--add-host` doesn't support wildcards — only exact FQDNs.
+**Limitation:** `--add-host` supports exact FQDNs without wildcards.
 For wildcard blocking, use dnsmasq `address=/corp.example.com/0.0.0.0` in a
 per-context config (requires dnsmasq awareness of contexts, not yet built).
 
@@ -135,8 +135,8 @@ hosts: files myhostname resolve [!UNAVAIL=return] dns
 via D-Bus, bypassing `/etc/resolv.conf` entirely. On the HOST this means
 dnsmasq is bypassed for applications using glibc (everything except `dig`).
 
-Inside containers this is fine — no D-Bus socket means nss-resolve returns
-UNAVAIL and glibc falls through to `dns` (resolv.conf → dnsmasq).
+Containers have no D-Bus socket, so nss-resolve returns UNAVAIL. glibc then
+falls through to `dns` (resolv.conf → dnsmasq).
 
 For host-side blocking (if desired): either remove `resolve` from nsswitch.conf
 or configure resolved to use dnsmasq as its upstream via
@@ -146,10 +146,9 @@ or configure resolved to use dnsmasq as its upstream via
 
 Not egress per se, but related to cross-contamination:
 
-- Separate agent session logs by context (each context's `~/.claude/` etc.
-  stays in its own home — divisi already handles this)
+- Keep agent session logs in their context home. Divisi already does this.
 - 30-day retention trim (cron or `divisi maintenance` command)
-- Scrub work logs of personal/OSS project references (grep + delete flagged
+- Scrub work logs of open source project references (grep + delete flagged
   sessions)
 - Context-awareness guardrails in agent config (CLAUDE.md etc.) that prompt
   agents to confirm they're in the right context
@@ -185,8 +184,11 @@ Per-context config:
 [work]
 egress_block_domains=                   # none (work can reach everything)
 
-[personal]
+[opensource]
 egress_block_domains=gitlab.cee.redhat.com,source.redhat.com,...
+
+[experiments]
+egress_block_domains=                   # no extra blocks without credentials
 ```
 
 `divisi apply` would:
@@ -257,8 +259,9 @@ local-only images; for shared images, use `--secret` build mounts instead.
 
 Implemented via:
 1. **PS1 prompt colors**: `\[\e[1;31m\][context-name]` (red/green/yellow)
-2. **Terminal title**: `\[\e]0;context-name: \w\a\]` in PS1 — sets tab/window title
-3. **Claude Code theme**: `light-daltonized` (work), `dark` (personal), `dark-ansi` (experiment)
+2. **Terminal title**: `\[\e]0;context-name: \w\a\]` in PS1 sets the tab title
+3. **Claude Code theme**: `light-daltonized` (work), `dark` (opensource),
+   `dark-ansi` (experiments)
 
 `divisi apply` should generate `.bashrc` with the prompt + title, and set
 the Claude Code theme in each context's `~/.claude/settings.json`.

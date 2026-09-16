@@ -49,7 +49,16 @@ Add the `export PATH` line to your shell startup file for future terminals. If
 another copy of a guarded CLI comes first on `PATH`, `divisi apply` stops and
 reports the conflicting directory. System binaries stay in place.
 
-Create your contexts, then build and check them:
+The initializer suggests three contexts:
+
+| Context | Use |
+| --- | --- |
+| `work` | Employer projects and accounts. |
+| `opensource` | Open source projects and accounts. |
+| `experiments` | Work without a mounted project tree or seeded credentials. |
+
+Press Enter to keep each name, or enter another name. Then build and check the
+contexts:
 
 ```sh
 divisi init
@@ -58,11 +67,13 @@ divisi check
 ```
 
 `divisi init` writes `~/.config/divisi/divisi.conf` by default. Running it again
-replaces that file, so copy an existing config first if you need it. Choose a
+replaces that file, so copy an existing config first if you need it. Existing
+configs keep their current context names until you edit them. Use a
 unique name for each context. A workspace mount is optional, but its host
 directory must exist before `apply`. Mounts cannot overlap another
 context's mount or the Divisi state directory. For a context without project
-files or credentials, leave the mount blank and choose `none` for agent authentication.
+files or credentials, leave the mount blank and choose `none` for agent
+authentication. These are the defaults for `experiments`.
 
 If you enter an Anthropic API key during `init`, Divisi writes it to that
 context's private `~/.secrets` directory. It does not put the key in the config
@@ -71,15 +82,19 @@ the source files remain on the host.
 
 ## First login and daily use
 
-Sign in separately inside each context. Use the names you chose during `init`:
+Sign in separately inside `work` and `opensource`. Use the names you chose
+during `init`:
 
 ```sh
 divisi enter work
 gh auth login
 exit
 
-divisi enter personal
+divisi enter opensource
 gh auth login
+exit
+
+divisi enter experiments
 exit
 
 divisi run work git config user.email
