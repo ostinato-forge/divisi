@@ -4,13 +4,14 @@ ARG BASE=registry.fedoraproject.org/fedora:43
 FROM ${BASE}
 
 ARG UID=1000
+ARG GID=1000
 ARG USERNAME=dev
 
 RUN dnf -y install \
         git git-lfs nodejs npm python3 python3-pip \
         make gcc gcc-c++ ripgrep fd-find jq tmux nano vim-enhanced \
         openssh-clients procps-ng iputils tar unzip which hostname \
-        findutils diffutils gitleaks \
+        findutils diffutils gitleaks curl shadow-utils \
     && dnf clean all
 
 # GitHub CLI: in Fedora repos, with upstream repo as fallback.
@@ -26,4 +27,5 @@ RUN npm install -g \
         @openai/codex \
         @google/gemini-cli
 
-RUN useradd -u ${UID} -m ${USERNAME} 2>/dev/null || true
+RUN getent group ${GID} >/dev/null || groupadd -g ${GID} ${USERNAME}
+RUN useradd -u ${UID} -g ${GID} -m ${USERNAME}

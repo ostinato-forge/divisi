@@ -31,18 +31,22 @@ case "$cmd" in
   status)
     load_config
     for n in "${CONTEXTS[@]}"; do
-      state=stopped; ctx_running "$n" && state=running
+      state=missing; if ctx_managed "$n"; then state=stopped; ctx_running "$n" && state=running; fi
       printf '%-16s %-8s home=%s\n' "$n" "$state" "$(ctx_home "$n")"
     done ;;
   enter|run)
     load_config; require_podman
     name="${1:?usage: divisi $cmd <name> [cmd...]}"; shift || true
     printf '%s\n' "${CONTEXTS[@]}" | grep -qx "$name" || die "unknown context: $name"
-    podman start "$name" >/dev/null 2>&1 || true
+    ctx_managed "$name" || die "context $name is missing or not managed by divisi"
+    ctx_running "$name" || podman start "$name" >/dev/null || die "cannot start context $name"
+    exec_flags=(-i)
+    [ -t 0 ] && [ -t 1 ] && exec_flags+=(-t)
     if [ "$cmd" = run ] || [ "$#" -gt 0 ]; then
-      exec podman exec -it -w "/home/$DIVISI_USER" "$name" bash -lc "$*"
+      [ "$#" -gt 0 ] || die "usage: divisi run <name> <command> [args...]"
+      exec podman exec "${exec_flags[@]}" -w "/home/$DIVISI_USER" "$name" bash -lc 'exec "$@"' bash "$@"
     fi
-    exec podman exec -it -w "/home/$DIVISI_USER" "$name" bash -l ;;
+    exec podman exec "${exec_flags[@]}" -w "/home/$DIVISI_USER" "$name" bash -l ;;
   help|-h|--help) sed -n '2,20p' "$(readlink -f "${BASH_SOURCE[0]}")" | sed 's/^# \{0,1\}//' ;;
   *)
     # bare context name shortcut: `divisi work` == `divisi enter work`

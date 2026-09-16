@@ -7,6 +7,7 @@ DIVISI_IMAGE="agentbox"
 DIVISI_BASE="registry.fedoraproject.org/fedora:43"
 DIVISI_STATE="$HOME/.local/share/divisi"     # context homes live here
 DIVISI_UID="$(id -u)"
+DIVISI_GID="$(id -g)"
 DIVISI_USER="$(id -un)"
 
 # Agent CLIs that must never run on the host (blocked by `divisi enforce`).

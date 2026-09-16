@@ -3,8 +3,12 @@
 # Container homes hold all state, so containers are recreated freely.
 
 divisi_apply() {
-  require_podman
+  require_supported_host
+  . "$DIVISI_ROOT/lib/enforce.sh"
+  divisi_guard_preflight
+  umask 077
   mkdir -p "$DIVISI_STATE"
+  chmod 700 "$DIVISI_STATE"
 
   info "Building image $DIVISI_IMAGE from $DIVISI_BASE"
   local pull=(); [ -n "${DIVISI_PULL:-}" ] && pull=(--pull=newer)
@@ -12,6 +16,7 @@ divisi_apply() {
     -t "$DIVISI_IMAGE" \
     --build-arg "BASE=$DIVISI_BASE" \
     --build-arg "UID=$DIVISI_UID" \
+    --build-arg "GID=$DIVISI_GID" \
     --build-arg "USERNAME=$DIVISI_USER" \
     -f "$DIVISI_ROOT/Containerfile" "$DIVISI_ROOT" >/dev/null
   ok "image built"
@@ -36,6 +41,7 @@ divisi_apply() {
 _build_home() {
   local n="$1" home; home="$(ctx_home "$n")"
   mkdir -p "$home"
+  chmod 700 "$home"
 
   # --- shell: visible context label + color, exported CONTEXT ---
   local color="${CTX_COLOR[$n]:-1;37}"
@@ -60,7 +66,8 @@ _build_home() {
 
   # --- secret vault (0700 dir, 0600 files), surfaced as ~/.secrets ---
   if [ -n "${CTX_SECRETS[$n]:-}" ]; then
-    mkdir -p -m 700 "$home/.secrets"
+    mkdir -p "$home/.secrets"
+    chmod 700 "$home/.secrets"
     local f
     for f in ${CTX_SECRETS[$n]}; do
       [ -e "$f" ] || { warn "secret not found, skipping: $f"; continue; }
@@ -93,17 +100,14 @@ _auth_env_lines() {
 
 # Honor the per-context CTX_SEED directive set during init.
 _seed_home() {
-  local n="$1" home="$2" seed="${CTX_SEED[$n]:-}"
+  local n="$1" home="$2" seed
+  seed="${CTX_SEED[$n]:-}"
   case "$seed" in
     gcloud)
-      [ -d "$HOME/.config/gcloud" ] && { mkdir -p "$home/.config"; cp -a "$HOME/.config/gcloud" "$home/.config/gcloud"; ok "$n: seeded gcloud ADC"; } ;;
+      [ -d "$HOME/.config/gcloud" ] && { mkdir -p "$home/.config/gcloud"; cp -a "$HOME/.config/gcloud/." "$home/.config/gcloud/"; ok "$n: seeded gcloud ADC"; } ;;
     claude:*)
       local src="${seed#claude:}"
-      [ -d "$src" ] && { cp -a "$src" "$home/.claude"; ok "$n: seeded claude config from $src"; } ;;
-    apikey:*)
-      mkdir -p -m 700 "$home/.secrets"
-      printf '%s' "${seed#apikey:}" > "$home/.secrets/anthropic_api_key"
-      chmod 600 "$home/.secrets/anthropic_api_key"; ok "$n: vaulted Anthropic API key" ;;
+      [ -d "$src" ] && { mkdir -p "$home/.claude"; cp -a "$src/." "$home/.claude/"; ok "$n: seeded claude config from $src"; } ;;
   esac
 }
 
@@ -127,12 +131,16 @@ _ctx_env_args() {
 
 _recreate_container() {
   local n="$1" home; home="$(ctx_home "$n")"
-  podman rm -f "$n" >/dev/null 2>&1 || true
+  if podman container exists "$n"; then
+    ctx_managed "$n" || die "container $n is not marked as managed by divisi; inspect or rename it before apply"
+    podman rm -f "$n" >/dev/null
+  fi
   local mount_args=()
   if [ -n "${CTX_MOUNT[$n]:-}" ]; then mount_args=(-v "${CTX_MOUNT[$n]}:${CTX_MOUNT[$n]}:z"); fi
   local env_args=(); mapfile -d '' -t env_args < <(_ctx_env_args "$n")
   podman create --name "$n" --hostname "$n" \
-    --userns=keep-id --user "$DIVISI_UID:$DIVISI_UID" \
+    --label io.divisi.managed=1 --label "io.divisi.context=$n" \
+    --userns=keep-id --user "$DIVISI_UID:$DIVISI_GID" \
     -e "HOME=/home/$DIVISI_USER" -e DISABLE_AUTOUPDATER=1 "${env_args[@]}" \
     --network host \
     -v "$home:/home/$DIVISI_USER:Z" "${mount_args[@]}" \

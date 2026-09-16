@@ -1,47 +1,31 @@
 # divisi
 
-*divisi* (musical: "divide into separate parts") splits one machine into
-isolated, per-identity contexts for running AI coding agents. One laptop, but
-work and personal never touch: separate credentials, separate git identities,
-separate file trees, separate agent session logs. The host becomes a neutral
-zone where agents are blocked from running at all.
+Divisi runs AI coding agents in separate, rootless Podman containers. Each
+context has its own home directory, credentials, git config, and optional
+workspace mount. Host command guards direct supported agent CLIs into a
+context. The containers share the host kernel and network.
 
-It is rootless `podman` plus bash. No daemon, no SaaS, nothing leaves your
-machine. Built for people who run several coding agents (Claude Code, Codex,
-Gemini, ...) across employer and personal work on the same box.
+## Purpose and limits
 
-## Why
+Separate contexts reduce accidental use of the wrong account or project files.
+Divisi rejects shared or overlapping workspace mounts. It checks that each
+configured container starts and can run commands. It also checks that context
+git email addresses differ.
 
-Run agents heavily on one machine and the messes pile up: the wrong git
-identity on a commit, an agent reading employer code while you meant to be on a
-side project, API keys in plaintext dotfiles, every secret you ever echoed
-sitting in one shell history, `gh` silently switched to the wrong account.
-None of these are exotic attacks. They are accidents, and the fix for
-accidents is structure: make the wrong thing impossible, not just discouraged.
-
-divisi gives each context its own container HOME, so:
-
-- **Credentials can't bleed.** The work container holds only the work token.
-  There is no personal credential there to leak, and vice versa.
-- **Data can't bleed.** Each context mounts only its own tree. An agent in
-  `personal` literally cannot open employer code; it isn't in the filesystem.
-- **Identity can't slip.** One git/gh identity per context, enforced by
-  absence of the others.
-- **The host stays clean.** Agent CLIs are shimmed to refuse to run on the
-  host, with a deliberate, logged override for the rare exception.
-
-## What it is not
-
-Containers share the host kernel. divisi stops *accidents* with very high
-confidence; it is not a sandbox against a hostile agent exploiting a kernel
-bug. For that you want microVMs (see `docs/GUIDE.md` roadmap). Think of divisi
-as seatbelts and lane markers, not a bank vault.
+A user can still add another account inside a context. Host GUI apps and IDE
+extensions bypass the command guards. Containers are not a boundary against a
+hostile process or a kernel exploit. Host networking allows a container to
+reach services on the host. See `docs/PLAN-egress.md` for a proposed network
+change that is not implemented.
 
 ## Quick start
 
 ```sh
-git clone <this-repo> && cd divisi
-ln -s "$PWD/bin/divisi" ~/.local/bin/divisi     # or put bin/ on PATH
+git clone https://github.com/ostinato-forge/divisi.git
+cd divisi
+mkdir -p ~/.local/bin
+ln -s "$PWD/bin/divisi" ~/.local/bin/divisi
+export PATH="$HOME/.local/bin:$PATH"
 
 divisi init       # answer prompts; writes ~/.config/divisi/divisi.conf
 divisi apply      # build image, create contexts, install host guard shims
@@ -86,19 +70,35 @@ with its own bind-mounted HOME under `$DIVISI_STATE`, optionally mounting one
 host directory, and joins host networking so agent OAuth callbacks work. The
 context's `.bashrc` carries a colored prompt, the right git identity, a secret
 vault at `~/.secrets`, and the correct claude auth (Vertex / Claude.ai / API
-key / none). Real agent binaries on the host are quarantined and replaced with
-guard shims.
+key / none). Host agent binaries stay in place. Guard shims in
+`~/.local/bin` must come first on `PATH`.
 
 Config and all state live **outside** this repo (`~/.config/divisi/` and
-`$DIVISI_STATE`). The repo is generic and safe to share or open-source.
+`$DIVISI_STATE`). The repo contains code and an example config. Keep real config and state out of it.
 
 See `docs/GUIDE.md` for startup-after-reboot, maintenance, and the roadmap.
 
-## Requirements
+## Supported hosts and requirements
 
-- Linux with rootless `podman` (developed on Fedora; SELinux handled).
-- `ripgrep` on the host for `divisi audit`.
-- Subuid/subgid range for your user (Fedora sets this up by default).
+The host target is RHEL 9, RHEL 10, or Fedora 40 or newer. Run divisi as a
+regular user. Install Podman and Git with your distribution packages. Install
+ripgrep if you want to use `divisi audit`. Rootless Podman needs entries for
+your user in `/etc/subuid` and `/etc/subgid`. Check it with `podman info`.
+`divisi apply` checks these requirements before it builds an image. The image
+uses Fedora 43 by default, regardless of the host release. Building it needs
+access to the Fedora registry and npm package registry.
+
+Put `~/.local/bin` before other agent CLI directories on `PATH`, and make that
+change in your shell startup file. Divisi creates guard shims there. If another
+copy of a guarded CLI comes first, `divisi apply` stops with an error. The
+shims do not change system binaries. Context names must be unique. Mounted
+trees must exist and cannot overlap another context's tree or the state tree.
+
+Existing installations with containers created before managed labels were
+added need a one-time migration. See [the operator guide](docs/GUIDE.md).
+
+The host support checks have offline tests. A real Podman run on each target
+release is still needed to confirm the full setup.
 
 ## License
 
