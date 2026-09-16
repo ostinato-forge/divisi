@@ -1,105 +1,142 @@
-# divisi
+# Divisi
 
-Divisi runs AI coding agents in separate, rootless Podman containers. Each
-context has its own home directory, credentials, git config, and optional
-workspace mount. Host command guards direct supported agent CLIs into a
-context. The containers share the host kernel and network.
+Divisi runs AI coding agents in separate rootless Podman containers. Each
+context has its own home directory, credentials, git settings, and optional
+workspace mount. Host command guards help prevent accidental agent runs outside
+a context.
 
-## Purpose and limits
+Divisi reduces accidental account and file access across contexts. It does not
+isolate a hostile process from the host kernel. Containers use host networking.
 
-Separate contexts reduce accidental use of the wrong account or project files.
-Divisi rejects shared or overlapping workspace mounts. It checks that each
-configured container starts and can run commands. It also checks that context
-git email addresses differ.
+## Host requirements
 
-A user can still add another account inside a context. Host GUI apps and IDE
-extensions bypass the command guards. Containers are not a boundary against a
-hostile process or a kernel exploit. Host networking allows a container to
-reach services on the host. See `docs/PLAN-egress.md` for a proposed network
-change that is not implemented.
+Divisi targets RHEL 9, RHEL 10, and Fedora 40 or newer. Use a regular user
+account with rootless Podman. Install Podman and Git from your host's package
+repositories:
 
-## Quick start
+```sh
+sudo dnf install podman git
+podman info
+```
+
+Rootless Podman needs an entry for your user in both `/etc/subuid` and
+`/etc/subgid`. `divisi apply` checks the host release, these entries, and
+`podman info` before building the image. If a check fails, fix the reported
+prerequisite and run `divisi apply` again.
+
+The container image uses Fedora 43 by default on every host. The first build
+needs access to the Fedora image registry and npm. Install `ripgrep` on the host
+if you want to use `divisi audit`.
+
+The host checks have offline tests for the listed releases. A full Podman run
+on each release remains unverified.
+
+## Install and configure
+
+Cloning the repository currently requires access to the private GitHub project.
+Put `~/.local/bin` first on `PATH` so Divisi's guards take priority over host
+agent CLIs:
 
 ```sh
 git clone https://github.com/ostinato-forge/divisi.git
 cd divisi
-mkdir -p ~/.local/bin
-ln -s "$PWD/bin/divisi" ~/.local/bin/divisi
+mkdir -p "$HOME/.local/bin"
+ln -s "$PWD/bin/divisi" "$HOME/.local/bin/divisi"
 export PATH="$HOME/.local/bin:$PATH"
-
-divisi init       # answer prompts; writes ~/.config/divisi/divisi.conf
-divisi apply      # build image, create contexts, install host guard shims
-divisi check      # verify the walls
-divisi audit      # scan the host for leaked agent secrets / exposure
 ```
 
-Then, one-time per context, do the logins divisi can't do for you:
+Add the `export PATH` line to your shell startup file for future terminals. If
+another copy of a guarded CLI comes first on `PATH`, `divisi apply` stops and
+reports the conflicting directory. System binaries stay in place.
+
+Create your contexts, then build and check them:
+
+```sh
+divisi init
+divisi apply
+divisi check
+```
+
+`divisi init` writes `~/.config/divisi/divisi.conf` by default. Running it again
+replaces that file, so copy an existing config first if you need it. Choose a
+unique name for each context. A workspace mount is optional, but its host
+directory must exist before `apply`. Mounts cannot overlap another
+context's mount or the Divisi state directory. For a context without project
+files or credentials, leave the mount blank and choose `none` for agent authentication.
+
+If you enter an Anthropic API key during `init`, Divisi writes it to that
+context's private `~/.secrets` directory. It does not put the key in the config
+file. `CTX_SECRETS` copies other named secret files into the same directory;
+the source files remain on the host.
+
+## First login and daily use
+
+Sign in separately inside each context. Use the names you chose during `init`:
 
 ```sh
 divisi enter work
-  gh auth login              # the ONE account for this context
-  claude   # /login if prompted
-  exit
+gh auth login
+exit
+
+divisi enter personal
+gh auth login
+exit
+
+divisi run work git config user.email
+divisi status
 ```
 
-Daily use:
-
-```sh
-divisi enter personal       # or just: divisi personal
-```
+A context home keeps logins and session files across container recreation and
+host reboots. `divisi apply` replaces containers but keeps their homes. Run
+`divisi check` after changing the config or rebuilding the image.
 
 ## Commands
 
-| command | does |
-|---|---|
-| `divisi init` | interactive config; nothing hardcoded |
-| `divisi apply` | build image, (re)create every context, install shims + launchers |
-| `divisi enter <name>` | shell into a context (alias: `divisi <name>`) |
-| `divisi run <name> <cmd>` | run one command in a context |
-| `divisi check` | verify isolation, distinct identities, host shims |
-| `divisi audit` | read-only host security scan |
-| `divisi enforce` | (re)install host guard shims (run after `npm -g` changes) |
-| `divisi relabel` | fix SELinux labels after moving files into a context home |
-| `divisi status` | list contexts and running state |
+| Command | Action |
+| --- | --- |
+| `divisi init` | Write an interactive local config. |
+| `divisi apply` | Build the image, recreate managed containers, and install guards. |
+| `divisi enter <name>` | Open a shell in a context. `divisi <name>` also works. |
+| `divisi run <name> <command> [args...]` | Run one command in a context. |
+| `divisi check` | Check container access, mounts, git email separation, and host guards. |
+| `divisi audit` | Scan host files and settings without changing them. Requires `ripgrep`. |
+| `divisi enforce` | Refresh host command guards. |
+| `divisi relabel` | Repair SELinux labels on context homes. |
+| `divisi status` | Show each configured context's container state. |
 
-## How it works
+## Isolation limits
 
-`divisi apply` builds one image (`Containerfile`) and creates one rootless
-container per context. Each container runs as your uid (`--userns=keep-id`)
-with its own bind-mounted HOME under `$DIVISI_STATE`, optionally mounting one
-host directory, and joins host networking so agent OAuth callbacks work. The
-context's `.bashrc` carries a colored prompt, the right git identity, a secret
-vault at `~/.secrets`, and the correct claude auth (Vertex / Claude.ai / API
-key / none). Host agent binaries stay in place. Guard shims in
-`~/.local/bin` must come first on `PATH`.
+Each context mounts its own home and, if configured, one host workspace. Divisi
+rejects shared and overlapping workspace mounts. `divisi check` fails if a
+container is missing, cannot run commands, or cannot verify a path check. It
+also checks that configured git email addresses differ. It does not prevent a
+user from adding a second account inside a context.
 
-Config and all state live **outside** this repo (`~/.config/divisi/` and
-`$DIVISI_STATE`). The repo contains code and an example config. Keep real config and state out of it.
+Host guards cover configured command names when `~/.local/bin` comes first on
+`PATH`. A direct path to another host binary, GUI app, or IDE extension can
+bypass them. The guard log records the tool name and time, without command
+arguments. Containers share the host network, so they can reach host services.
+Network controls are proposed in [the egress plan](docs/PLAN-egress.md) and are
+not implemented.
 
-See `docs/GUIDE.md` for startup-after-reboot, maintenance, and the roadmap.
+Config and context state live outside this repository. See
+[the operator guide](docs/GUIDE.md) for backups, maintenance, and migration from
+earlier Divisi containers. Earlier containers without Divisi labels need a
+one-time migration before `apply` can replace them.
 
-## Supported hosts and requirements
+## Development checks
 
-The host target is RHEL 9, RHEL 10, or Fedora 40 or newer. Run divisi as a
-regular user. Install Podman and Git with your distribution packages. Install
-ripgrep if you want to use `divisi audit`. Rootless Podman needs entries for
-your user in `/etc/subuid` and `/etc/subgid`. Check it with `podman info`.
-`divisi apply` checks these requirements before it builds an image. The image
-uses Fedora 43 by default, regardless of the host release. Building it needs
-access to the Fedora registry and npm package registry.
+```sh
+bash tests/test-core.sh
+bash -n bin/divisi lib/*.sh tests/test-core.sh
+shellcheck -x -S warning bin/divisi tests/test-core.sh
+shellcheck -s bash -S error lib/*.sh
+```
 
-Put `~/.local/bin` before other agent CLI directories on `PATH`, and make that
-change in your shell startup file. Divisi creates guard shims there. If another
-copy of a guarded CLI comes first, `divisi apply` stops with an error. The
-shims do not change system binaries. Context names must be unique. Mounted
-trees must exist and cannot overlap another context's tree or the state tree.
-
-Existing installations with containers created before managed labels were
-added need a one-time migration. See [the operator guide](docs/GUIDE.md).
-
-The host support checks have offline tests. A real Podman run on each target
-release is still needed to confirm the full setup.
+The ShellCheck commands require ShellCheck on the host. The tests cover failed
+container checks, mount validation, API key handling, guard logs, and host
+release detection. They do not build or start a real container.
 
 ## License
 
-Apache-2.0. See `LICENSE`.
+Apache-2.0. See [LICENSE](LICENSE).
