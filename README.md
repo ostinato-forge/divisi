@@ -33,7 +33,6 @@ on each release remains unverified.
 
 ## Install and configure
 
-Cloning the repository currently requires access to the private GitHub project.
 Put `~/.local/bin` first on `PATH` so Divisi's guards take priority over host
 agent CLIs:
 
